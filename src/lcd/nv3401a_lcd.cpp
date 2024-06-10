@@ -9,6 +9,7 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_nv3401a.h"
 #include "nv3401a_lcd.h"
+#include "Arduino.h"
 
 #define LCD_HOST SPI2_HOST
 #define LCD_BIT_PER_PIXEL (16)
@@ -84,12 +85,20 @@ void nv3401a_lcd::draw16bitbergbbitmap(uint16_t x, uint16_t y, uint16_t w, uint1
     esp_lcd_panel_draw_bitmap(panel_handle, x_start, y_start, x_end, y_end, color_data);
 }
 
+void nv3401a_lcd::fillScreen(uint16_t color)
+{
+    uint16_t *color_data = (uint16_t *)heap_caps_malloc(480 * 272 * 2, MALLOC_CAP_INTERNAL);
+    memset(color_data, color, 480 * 272 * 2);
+    draw16bitbergbbitmap(0, 0, 480, 272, color_data);
+    free(color_data);
+}
+
 uint16_t nv3401a_lcd::width()
 {
-   return LCD_H_RES;
+    return LCD_H_RES;
 }
 
 uint16_t nv3401a_lcd::height()
 {
-   return LCD_V_RES;
+    return LCD_V_RES;
 }
