@@ -18,23 +18,23 @@
 #include "esp_lcd_panel_commands.h"
 #include "esp_log.h"
 
-#include "esp_lcd_nv3401a.h"
+#include "esp_lcd_nv3041a.h"
 
 #define LCD_OPCODE_WRITE_CMD        (0x02ULL)
 #define LCD_OPCODE_READ_CMD         (0x03ULL)
 #define LCD_OPCODE_WRITE_COLOR      (0x32ULL)
 
-static const char *TAG = "nv3401a";
+static const char *TAG = "nv3041a";
 
-static esp_err_t panel_nv3401a_del(esp_lcd_panel_t *panel);
-static esp_err_t panel_nv3401a_reset(esp_lcd_panel_t *panel);
-static esp_err_t panel_nv3401a_init(esp_lcd_panel_t *panel);
-static esp_err_t panel_nv3401a_draw_bitmap(esp_lcd_panel_t *panel, int x_start, int y_start, int x_end, int y_end, const void *color_data);
-static esp_err_t panel_nv3401a_invert_color(esp_lcd_panel_t *panel, bool invert_color_data);
-static esp_err_t panel_nv3401a_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool mirror_y);
-static esp_err_t panel_nv3401a_swap_xy(esp_lcd_panel_t *panel, bool swap_axes);
-static esp_err_t panel_nv3401a_set_gap(esp_lcd_panel_t *panel, int x_gap, int y_gap);
-static esp_err_t panel_nv3401a_disp_on_off(esp_lcd_panel_t *panel, bool off);
+static esp_err_t panel_nv3041a_del(esp_lcd_panel_t *panel);
+static esp_err_t panel_nv3041a_reset(esp_lcd_panel_t *panel);
+static esp_err_t panel_nv3041a_init(esp_lcd_panel_t *panel);
+static esp_err_t panel_nv3041a_draw_bitmap(esp_lcd_panel_t *panel, int x_start, int y_start, int x_end, int y_end, const void *color_data);
+static esp_err_t panel_nv3041a_invert_color(esp_lcd_panel_t *panel, bool invert_color_data);
+static esp_err_t panel_nv3041a_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool mirror_y);
+static esp_err_t panel_nv3041a_swap_xy(esp_lcd_panel_t *panel, bool swap_axes);
+static esp_err_t panel_nv3041a_set_gap(esp_lcd_panel_t *panel, int x_gap, int y_gap);
+static esp_err_t panel_nv3041a_disp_on_off(esp_lcd_panel_t *panel, bool off);
 
 typedef struct {
     esp_lcd_panel_t base;
@@ -45,22 +45,22 @@ typedef struct {
     uint8_t fb_bits_per_pixel;
     uint8_t madctl_val; // save current value of LCD_CMD_MADCTL register
     uint8_t colmod_val; // save surrent value of LCD_CMD_COLMOD register
-    const nv3401a_lcd_init_cmd_t *init_cmds;
+    const nv3041a_lcd_init_cmd_t *init_cmds;
     uint16_t init_cmds_size;
     struct {
         unsigned int use_qspi_interface: 1;
         unsigned int reset_level: 1;
     } flags;
-} nv3401a_panel_t;
+} nv3041a_panel_t;
 
-esp_err_t esp_lcd_new_panel_nv3401a(const esp_lcd_panel_io_handle_t io, const esp_lcd_panel_dev_config_t *panel_dev_config, esp_lcd_panel_handle_t *ret_panel)
+esp_err_t esp_lcd_new_panel_nv3041a(const esp_lcd_panel_io_handle_t io, const esp_lcd_panel_dev_config_t *panel_dev_config, esp_lcd_panel_handle_t *ret_panel)
 {
     ESP_RETURN_ON_FALSE(io && panel_dev_config && ret_panel, ESP_ERR_INVALID_ARG, TAG, "invalid argument");
 
     esp_err_t ret = ESP_OK;
-    nv3401a_panel_t *nv3401a = NULL;
-    nv3401a = calloc(1, sizeof(nv3401a_panel_t));
-    ESP_GOTO_ON_FALSE(nv3401a, ESP_ERR_NO_MEM, err, TAG, "no mem for nv3401a panel");
+    nv3041a_panel_t *nv3041a = NULL;
+    nv3041a = calloc(1, sizeof(nv3041a_panel_t));
+    ESP_GOTO_ON_FALSE(nv3041a, ESP_ERR_NO_MEM, err, TAG, "no mem for nv3041a panel");
 
     if (panel_dev_config->reset_gpio_num >= 0) {
         gpio_config_t io_conf = {
@@ -72,10 +72,10 @@ esp_err_t esp_lcd_new_panel_nv3401a(const esp_lcd_panel_io_handle_t io, const es
 
     switch (panel_dev_config->rgb_ele_order) {
     case LCD_RGB_ELEMENT_ORDER_RGB:
-        nv3401a->madctl_val = 0;
+        nv3041a->madctl_val = 0;
         break;
     case LCD_RGB_ELEMENT_ORDER_BGR:
-        nv3401a->madctl_val |= LCD_CMD_BGR_BIT;
+        nv3041a->madctl_val |= LCD_CMD_BGR_BIT;
         break;
     default:
         ESP_GOTO_ON_FALSE(false, ESP_ERR_NOT_SUPPORTED, err, TAG, "unsupported color element order");
@@ -84,55 +84,55 @@ esp_err_t esp_lcd_new_panel_nv3401a(const esp_lcd_panel_io_handle_t io, const es
 
     switch (panel_dev_config->bits_per_pixel) {
     case 16: // RGB565
-        nv3401a->colmod_val = 0x55;
-        nv3401a->fb_bits_per_pixel = 16;
+        nv3041a->colmod_val = 0x55;
+        nv3041a->fb_bits_per_pixel = 16;
         break;
     case 18: // RGB666
-        nv3401a->colmod_val = 0x66;
+        nv3041a->colmod_val = 0x66;
         // each color component (R/G/B) should occupy the 6 high bits of a byte, which means 3 full bytes are required for a pixel
-        nv3401a->fb_bits_per_pixel = 24;
+        nv3041a->fb_bits_per_pixel = 24;
         break;
     default:
         ESP_GOTO_ON_FALSE(false, ESP_ERR_NOT_SUPPORTED, err, TAG, "unsupported pixel width");
         break;
     }
 
-    nv3401a->io = io;
-    nv3401a->reset_gpio_num = panel_dev_config->reset_gpio_num;
-    nv3401a->flags.reset_level = panel_dev_config->flags.reset_active_high;
-    nv3401a_vendor_config_t *vendor_config = (nv3401a_vendor_config_t *)panel_dev_config->vendor_config;
+    nv3041a->io = io;
+    nv3041a->reset_gpio_num = panel_dev_config->reset_gpio_num;
+    nv3041a->flags.reset_level = panel_dev_config->flags.reset_active_high;
+    nv3041a_vendor_config_t *vendor_config = (nv3041a_vendor_config_t *)panel_dev_config->vendor_config;
     if (vendor_config) {
-        nv3401a->init_cmds = vendor_config->init_cmds;
-        nv3401a->init_cmds_size = vendor_config->init_cmds_size;
-        nv3401a->flags.use_qspi_interface = vendor_config->flags.use_qspi_interface;
+        nv3041a->init_cmds = vendor_config->init_cmds;
+        nv3041a->init_cmds_size = vendor_config->init_cmds_size;
+        nv3041a->flags.use_qspi_interface = vendor_config->flags.use_qspi_interface;
     }
-    nv3401a->base.del = panel_nv3401a_del;
-    nv3401a->base.reset = panel_nv3401a_reset;
-    nv3401a->base.init = panel_nv3401a_init;
-    nv3401a->base.draw_bitmap = panel_nv3401a_draw_bitmap;
-    nv3401a->base.invert_color = panel_nv3401a_invert_color;
-    nv3401a->base.set_gap = panel_nv3401a_set_gap;
-    nv3401a->base.mirror = panel_nv3401a_mirror;
-    nv3401a->base.swap_xy = panel_nv3401a_swap_xy;
-    nv3401a->base.disp_on_off = panel_nv3401a_disp_on_off;
-    *ret_panel = &(nv3401a->base);
-    ESP_LOGD(TAG, "new nv3401a panel @%p", nv3401a);
+    nv3041a->base.del = panel_nv3041a_del;
+    nv3041a->base.reset = panel_nv3041a_reset;
+    nv3041a->base.init = panel_nv3041a_init;
+    nv3041a->base.draw_bitmap = panel_nv3041a_draw_bitmap;
+    nv3041a->base.invert_color = panel_nv3041a_invert_color;
+    nv3041a->base.set_gap = panel_nv3041a_set_gap;
+    nv3041a->base.mirror = panel_nv3041a_mirror;
+    nv3041a->base.swap_xy = panel_nv3041a_swap_xy;
+    nv3041a->base.disp_on_off = panel_nv3041a_disp_on_off;
+    *ret_panel = &(nv3041a->base);
+    ESP_LOGD(TAG, "new nv3041a panel @%p", nv3041a);
 
     return ESP_OK;
 
 err:
-    if (nv3401a) {
+    if (nv3041a) {
         if (panel_dev_config->reset_gpio_num >= 0) {
             gpio_reset_pin(panel_dev_config->reset_gpio_num);
         }
-        free(nv3401a);
+        free(nv3041a);
     }
     return ret;
 }
 
-static esp_err_t tx_param(nv3401a_panel_t *nv3401a, esp_lcd_panel_io_handle_t io, int lcd_cmd, const void *param, size_t param_size)
+static esp_err_t tx_param(nv3041a_panel_t *nv3041a, esp_lcd_panel_io_handle_t io, int lcd_cmd, const void *param, size_t param_size)
 {
-    if (nv3401a->flags.use_qspi_interface) {
+    if (nv3041a->flags.use_qspi_interface) {
         lcd_cmd &= 0xff;
         lcd_cmd <<= 8;
         lcd_cmd |= LCD_OPCODE_WRITE_CMD << 24;
@@ -140,9 +140,9 @@ static esp_err_t tx_param(nv3401a_panel_t *nv3401a, esp_lcd_panel_io_handle_t io
     return esp_lcd_panel_io_tx_param(io, lcd_cmd, param, param_size);
 }
 
-static esp_err_t tx_color(nv3401a_panel_t *nv3401a, esp_lcd_panel_io_handle_t io, int lcd_cmd, const void *param, size_t param_size)
+static esp_err_t tx_color(nv3041a_panel_t *nv3041a, esp_lcd_panel_io_handle_t io, int lcd_cmd, const void *param, size_t param_size)
 {
-    if (nv3401a->flags.use_qspi_interface) {
+    if (nv3041a->flags.use_qspi_interface) {
         lcd_cmd &= 0xff;
         lcd_cmd <<= 8;
         lcd_cmd |= LCD_OPCODE_WRITE_COLOR << 24;
@@ -150,38 +150,38 @@ static esp_err_t tx_color(nv3401a_panel_t *nv3401a, esp_lcd_panel_io_handle_t io
     return esp_lcd_panel_io_tx_color(io, lcd_cmd, param, param_size);
 }
 
-static esp_err_t panel_nv3401a_del(esp_lcd_panel_t *panel)
+static esp_err_t panel_nv3041a_del(esp_lcd_panel_t *panel)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
 
-    if (nv3401a->reset_gpio_num >= 0) {
-        gpio_reset_pin(nv3401a->reset_gpio_num);
+    if (nv3041a->reset_gpio_num >= 0) {
+        gpio_reset_pin(nv3041a->reset_gpio_num);
     }
-    ESP_LOGD(TAG, "del nv3401a panel @%p", nv3401a);
-    free(nv3401a);
+    ESP_LOGD(TAG, "del nv3041a panel @%p", nv3041a);
+    free(nv3041a);
     return ESP_OK;
 }
 
-static esp_err_t panel_nv3401a_reset(esp_lcd_panel_t *panel)
+static esp_err_t panel_nv3041a_reset(esp_lcd_panel_t *panel)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
-    esp_lcd_panel_io_handle_t io = nv3401a->io;
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
+    esp_lcd_panel_io_handle_t io = nv3041a->io;
 
     // Perform hardware reset
-    if (nv3401a->reset_gpio_num >= 0) {
-        gpio_set_level(nv3401a->reset_gpio_num, nv3401a->flags.reset_level);
+    if (nv3041a->reset_gpio_num >= 0) {
+        gpio_set_level(nv3041a->reset_gpio_num, nv3041a->flags.reset_level);
         vTaskDelay(pdMS_TO_TICKS(10));
-        gpio_set_level(nv3401a->reset_gpio_num, !nv3401a->flags.reset_level);
+        gpio_set_level(nv3041a->reset_gpio_num, !nv3041a->flags.reset_level);
         vTaskDelay(pdMS_TO_TICKS(120));
     } else { // Perform software reset
-        ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
+        ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, LCD_CMD_SWRESET, NULL, 0), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(120));
     }
 
     return ESP_OK;
 }
 
-static const nv3401a_lcd_init_cmd_t vendor_specific_init_default[] = {
+static const nv3041a_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0xff, (uint8_t []){0xa5}, 1, 0},
     {0xE7, (uint8_t []){0x10}, 1, 0},
     {0x35, (uint8_t []){0x00}, 1, 0},
@@ -305,30 +305,30 @@ static const nv3401a_lcd_init_cmd_t vendor_specific_init_default[] = {
     {0x29, (uint8_t []){0x00}, 1, 100},
 };
 
-static esp_err_t panel_nv3401a_init(esp_lcd_panel_t *panel)
+static esp_err_t panel_nv3041a_init(esp_lcd_panel_t *panel)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
-    esp_lcd_panel_io_handle_t io = nv3401a->io;
-    const nv3401a_lcd_init_cmd_t *init_cmds = NULL;
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
+    esp_lcd_panel_io_handle_t io = nv3041a->io;
+    const nv3041a_lcd_init_cmd_t *init_cmds = NULL;
     uint16_t init_cmds_size = 0;
     bool is_user_set = true;
     bool is_cmd_overwritten = false;
 
-    ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, LCD_CMD_MADCTL, (uint8_t[]) {
-        nv3401a->madctl_val,
+    ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, LCD_CMD_MADCTL, (uint8_t[]) {
+        nv3041a->madctl_val,
     }, 1), TAG, "send command failed");
-    ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, LCD_CMD_COLMOD, (uint8_t[]) {
-        nv3401a->colmod_val,
+    ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, LCD_CMD_COLMOD, (uint8_t[]) {
+        nv3041a->colmod_val,
     }, 1), TAG, "send command failed");
 
     // vendor specific initialization, it can be different between manufacturers
     // should consult the LCD supplier for initialization sequence code
-    if (nv3401a->init_cmds) {
-        init_cmds = nv3401a->init_cmds;
-        init_cmds_size = nv3401a->init_cmds_size;
+    if (nv3041a->init_cmds) {
+        init_cmds = nv3041a->init_cmds;
+        init_cmds_size = nv3041a->init_cmds_size;
     } else {
         init_cmds = vendor_specific_init_default;
-        init_cmds_size = sizeof(vendor_specific_init_default) / sizeof(nv3401a_lcd_init_cmd_t);
+        init_cmds_size = sizeof(vendor_specific_init_default) / sizeof(nv3041a_lcd_init_cmd_t);
     }
 
     for (int i = 0; i < init_cmds_size; i++) {
@@ -337,11 +337,11 @@ static esp_err_t panel_nv3401a_init(esp_lcd_panel_t *panel)
             switch (init_cmds[i].cmd) {
             case LCD_CMD_MADCTL:
                 is_cmd_overwritten = true;
-                nv3401a->madctl_val = ((uint8_t *)init_cmds[i].data)[0];
+                nv3041a->madctl_val = ((uint8_t *)init_cmds[i].data)[0];
                 break;
             case LCD_CMD_COLMOD:
                 is_cmd_overwritten = true;
-                nv3401a->colmod_val = ((uint8_t *)init_cmds[i].data)[0];
+                nv3041a->colmod_val = ((uint8_t *)init_cmds[i].data)[0];
                 break;
             default:
                 is_cmd_overwritten = false;
@@ -355,7 +355,7 @@ static esp_err_t panel_nv3401a_init(esp_lcd_panel_t *panel)
         }
 
         // Send command
-        ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, init_cmds[i].cmd, init_cmds[i].data, init_cmds[i].data_bytes), TAG, "send command failed");
+        ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, init_cmds[i].cmd, init_cmds[i].data, init_cmds[i].data_bytes), TAG, "send command failed");
         vTaskDelay(pdMS_TO_TICKS(init_cmds[i].delay_ms));
 
     }
@@ -364,100 +364,100 @@ static esp_err_t panel_nv3401a_init(esp_lcd_panel_t *panel)
     return ESP_OK;
 }
 
-static esp_err_t panel_nv3401a_draw_bitmap(esp_lcd_panel_t *panel, int x_start, int y_start, int x_end, int y_end, const void *color_data)
+static esp_err_t panel_nv3041a_draw_bitmap(esp_lcd_panel_t *panel, int x_start, int y_start, int x_end, int y_end, const void *color_data)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
     assert((x_start < x_end) && (y_start < y_end) && "start position must be smaller than end position");
-    esp_lcd_panel_io_handle_t io = nv3401a->io;
+    esp_lcd_panel_io_handle_t io = nv3041a->io;
 
-    x_start += nv3401a->x_gap;
-    x_end += nv3401a->x_gap;
-    y_start += nv3401a->y_gap;
-    y_end += nv3401a->y_gap;
+    x_start += nv3041a->x_gap;
+    x_end += nv3041a->x_gap;
+    y_start += nv3041a->y_gap;
+    y_end += nv3041a->y_gap;
 
     // define an area of frame memory where MCU can access
-    ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, LCD_CMD_CASET, (uint8_t[]) {
+    ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, LCD_CMD_CASET, (uint8_t[]) {
         (x_start >> 8) & 0xFF,
         x_start & 0xFF,
         ((x_end - 1) >> 8) & 0xFF,
         (x_end - 1) & 0xFF,
     }, 4), TAG, "send command failed");
-    ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, LCD_CMD_RASET, (uint8_t[]) {
+    ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, LCD_CMD_RASET, (uint8_t[]) {
         (y_start >> 8) & 0xFF,
         y_start & 0xFF,
         ((y_end - 1) >> 8) & 0xFF,
         (y_end - 1) & 0xFF,
     }, 4), TAG, "send command failed");
     // transfer frame buffer
-    size_t len = (x_end - x_start) * (y_end - y_start) * nv3401a->fb_bits_per_pixel / 8;
-    tx_color(nv3401a, io, LCD_CMD_RAMWR, color_data, len);
+    size_t len = (x_end - x_start) * (y_end - y_start) * nv3041a->fb_bits_per_pixel / 8;
+    tx_color(nv3041a, io, LCD_CMD_RAMWR, color_data, len);
 
     return ESP_OK;
 }
 
-static esp_err_t panel_nv3401a_invert_color(esp_lcd_panel_t *panel, bool invert_color_data)
+static esp_err_t panel_nv3041a_invert_color(esp_lcd_panel_t *panel, bool invert_color_data)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
-    esp_lcd_panel_io_handle_t io = nv3401a->io;
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
+    esp_lcd_panel_io_handle_t io = nv3041a->io;
     int command = 0;
     if (invert_color_data) {
         command = LCD_CMD_INVON;
     } else {
         command = LCD_CMD_INVOFF;
     }
-    ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, command, NULL, 0), TAG, "send command failed");
+    ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, command, NULL, 0), TAG, "send command failed");
     return ESP_OK;
 }
 
-static esp_err_t panel_nv3401a_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool mirror_y)
+static esp_err_t panel_nv3041a_mirror(esp_lcd_panel_t *panel, bool mirror_x, bool mirror_y)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
-    esp_lcd_panel_io_handle_t io = nv3401a->io;
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
+    esp_lcd_panel_io_handle_t io = nv3041a->io;
     esp_err_t ret = ESP_OK;
 
     if (mirror_x) {
-        nv3401a->madctl_val |= BIT(6);
+        nv3041a->madctl_val |= BIT(6);
     } else {
-        nv3401a->madctl_val &= ~BIT(6);
+        nv3041a->madctl_val &= ~BIT(6);
     }
     if (mirror_y) {
-        nv3401a->madctl_val |= BIT(7);
+        nv3041a->madctl_val |= BIT(7);
     } else {
-        nv3401a->madctl_val &= ~BIT(7);
+        nv3041a->madctl_val &= ~BIT(7);
     }
-    ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, LCD_CMD_MADCTL, (uint8_t[]) {
-        nv3401a->madctl_val
+    ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, LCD_CMD_MADCTL, (uint8_t[]) {
+        nv3041a->madctl_val
     }, 1), TAG, "send command failed");
     return ret;
 }
 
-static esp_err_t panel_nv3401a_swap_xy(esp_lcd_panel_t *panel, bool swap_axes)
+static esp_err_t panel_nv3041a_swap_xy(esp_lcd_panel_t *panel, bool swap_axes)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
-    esp_lcd_panel_io_handle_t io = nv3401a->io;
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
+    esp_lcd_panel_io_handle_t io = nv3041a->io;
     if (swap_axes) {
-        nv3401a->madctl_val |= LCD_CMD_MV_BIT;
+        nv3041a->madctl_val |= LCD_CMD_MV_BIT;
     } else {
-        nv3401a->madctl_val &= ~LCD_CMD_MV_BIT;
+        nv3041a->madctl_val &= ~LCD_CMD_MV_BIT;
     }
     esp_lcd_panel_io_tx_param(io, LCD_CMD_MADCTL, (uint8_t[]) {
-        nv3401a->madctl_val
+        nv3041a->madctl_val
     }, 1);
     return ESP_OK;
 }
 
-static esp_err_t panel_nv3401a_set_gap(esp_lcd_panel_t *panel, int x_gap, int y_gap)
+static esp_err_t panel_nv3041a_set_gap(esp_lcd_panel_t *panel, int x_gap, int y_gap)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
-    nv3401a->x_gap = x_gap;
-    nv3401a->y_gap = y_gap;
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
+    nv3041a->x_gap = x_gap;
+    nv3041a->y_gap = y_gap;
     return ESP_OK;
 }
 
-static esp_err_t panel_nv3401a_disp_on_off(esp_lcd_panel_t *panel, bool on_off)
+static esp_err_t panel_nv3041a_disp_on_off(esp_lcd_panel_t *panel, bool on_off)
 {
-    nv3401a_panel_t *nv3401a = __containerof(panel, nv3401a_panel_t, base);
-    esp_lcd_panel_io_handle_t io = nv3401a->io;
+    nv3041a_panel_t *nv3041a = __containerof(panel, nv3041a_panel_t, base);
+    esp_lcd_panel_io_handle_t io = nv3041a->io;
     int command = 0;
 
     if (on_off) {
@@ -465,6 +465,6 @@ static esp_err_t panel_nv3401a_disp_on_off(esp_lcd_panel_t *panel, bool on_off)
     } else {
         command = LCD_CMD_DISPOFF;
     }
-    ESP_RETURN_ON_ERROR(tx_param(nv3401a, io, command, NULL, 0), TAG, "send command failed");
+    ESP_RETURN_ON_ERROR(tx_param(nv3041a, io, command, NULL, 0), TAG, "send command failed");
     return ESP_OK;
 }

@@ -21,9 +21,9 @@ extern "C" {
 #include <avilib.h>
 }
 #include "pins_config.h"
-#include "src/lcd/nv3401a_lcd.h"
+#include "src/lcd/nv3041a_lcd.h"
 
-nv3401a_lcd lcd = nv3401a_lcd(TFT_QSPI_CS, TFT_QSPI_SCK, TFT_QSPI_D0, TFT_QSPI_D1, TFT_QSPI_D2, TFT_QSPI_D3, TFT_QSPI_RST);
+nv3041a_lcd lcd = nv3041a_lcd(TFT_QSPI_CS, TFT_QSPI_SCK, TFT_QSPI_D0, TFT_QSPI_D1, TFT_QSPI_D2, TFT_QSPI_D3, TFT_QSPI_RST);
 
 /* variables */
 static avi_t *a;

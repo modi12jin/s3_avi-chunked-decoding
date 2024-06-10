@@ -1,11 +1,11 @@
-#ifndef _NV3401A_LCD_H
-#define _NV3401A_LCD_H
+#ifndef _NV3041A_LCD_H
+#define _NV3041A_LCD_H
 #include <stdio.h>
 
-class nv3401a_lcd
+class nv3041a_lcd
 {
 public:
-    nv3401a_lcd(int8_t qspi_cs, int8_t qspi_clk, int8_t qspi_0,
+    nv3041a_lcd(int8_t qspi_cs, int8_t qspi_clk, int8_t qspi_0,
                   int8_t qspi_1, int8_t qspi_2, int8_t qspi_3, int8_t lcd_rst);
 
     void begin();

@@ -7,8 +7,8 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
-#include "esp_lcd_nv3401a.h"
-#include "nv3401a_lcd.h"
+#include "esp_lcd_nv3041a.h"
+#include "nv3041a_lcd.h"
 #include "Arduino.h"
 
 #define LCD_HOST SPI2_HOST
@@ -20,7 +20,7 @@
 static const char *TAG = "example";
 esp_lcd_panel_handle_t panel_handle = NULL;
 
-nv3401a_lcd::nv3401a_lcd(int8_t qspi_cs, int8_t qspi_clk, int8_t qspi_0,
+nv3041a_lcd::nv3041a_lcd(int8_t qspi_cs, int8_t qspi_clk, int8_t qspi_0,
                          int8_t qspi_1, int8_t qspi_2, int8_t qspi_3, int8_t lcd_rst)
 {
     _qspi_cs = qspi_cs;
@@ -32,9 +32,9 @@ nv3401a_lcd::nv3401a_lcd(int8_t qspi_cs, int8_t qspi_clk, int8_t qspi_0,
     _lcd_rst = lcd_rst;
 }
 
-void nv3401a_lcd::begin()
+void nv3041a_lcd::begin()
 {
-    const spi_bus_config_t buscfg = NV3401A_PANEL_BUS_QSPI_CONFIG(_qspi_clk,
+    const spi_bus_config_t buscfg = NV3041A_PANEL_BUS_QSPI_CONFIG(_qspi_clk,
                                                                   _qspi_0,
                                                                   _qspi_1,
                                                                   _qspi_2,
@@ -44,9 +44,9 @@ void nv3401a_lcd::begin()
     ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
     esp_lcd_panel_io_handle_t io_handle = NULL;
-    const esp_lcd_panel_io_spi_config_t io_config = NV3401A_PANEL_IO_QSPI_CONFIG(_qspi_cs, NULL, NULL);
+    const esp_lcd_panel_io_spi_config_t io_config = NV3041A_PANEL_IO_QSPI_CONFIG(_qspi_cs, NULL, NULL);
 
-    nv3401a_vendor_config_t vendor_config = {
+    nv3041a_vendor_config_t vendor_config = {
         .flags = {
             .use_qspi_interface = 1,
         },
@@ -62,7 +62,7 @@ void nv3401a_lcd::begin()
         .vendor_config = &vendor_config,
     };
 
-    esp_lcd_new_panel_nv3401a(io_handle, &panel_config, &panel_handle);
+    esp_lcd_new_panel_nv3041a(io_handle, &panel_config, &panel_handle);
 
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
@@ -70,12 +70,12 @@ void nv3401a_lcd::begin()
     esp_lcd_panel_disp_on_off(panel_handle, true);
 }
 
-void nv3401a_lcd::lcd_draw_bitmap(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_t y_end, uint16_t *color_data)
+void nv3041a_lcd::lcd_draw_bitmap(uint16_t x_start, uint16_t y_start, uint16_t x_end, uint16_t y_end, uint16_t *color_data)
 {
     esp_lcd_panel_draw_bitmap(panel_handle, x_start, y_start, x_end, y_end, color_data);
 }
 
-void nv3401a_lcd::draw16bitbergbbitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *color_data)
+void nv3041a_lcd::draw16bitbergbbitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *color_data)
 {
     uint16_t x_start = x;
     uint16_t y_start = y;
@@ -85,7 +85,7 @@ void nv3401a_lcd::draw16bitbergbbitmap(uint16_t x, uint16_t y, uint16_t w, uint1
     esp_lcd_panel_draw_bitmap(panel_handle, x_start, y_start, x_end, y_end, color_data);
 }
 
-void nv3401a_lcd::fillScreen(uint16_t color)
+void nv3041a_lcd::fillScreen(uint16_t color)
 {
     uint16_t *color_data = (uint16_t *)heap_caps_malloc(480 * 272 * 2, MALLOC_CAP_INTERNAL);
     memset(color_data, color, 480 * 272 * 2);
@@ -93,12 +93,12 @@ void nv3401a_lcd::fillScreen(uint16_t color)
     free(color_data);
 }
 
-uint16_t nv3401a_lcd::width()
+uint16_t nv3041a_lcd::width()
 {
     return LCD_H_RES;
 }
 
-uint16_t nv3401a_lcd::height()
+uint16_t nv3041a_lcd::height()
 {
     return LCD_V_RES;
 }
